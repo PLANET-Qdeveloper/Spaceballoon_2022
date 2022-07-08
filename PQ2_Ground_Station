@@ -1,0 +1,95 @@
+#include "mbed.h"
+#include "PQ_RM92A.h"
+
+Serial pc(USBTX, USBRX, 115200);
+Serial rm_serial(D1, D0, 115200);
+
+RM92 rm(rm_serial);
+
+void downlink_handler(char* data);
+
+char mission_timer_reset;
+short mission_time_bits;
+int mission_time;
+int flight_time;
+char phase;
+char flags;
+char flags2;
+
+float lat10000;
+float lon10000;
+float press100;
+float temperature;
+
+int main(){
+    rm.attach(downlink_handler);
+    pc.printf("PLANET-Q GROUND STATION\r\n");
+
+    while(1){
+        if(pc.readable()){
+            char cmd[1];
+            cmd[0] = pc.getc();
+            rm.send_cmd(0x0000, cmd);
+            pc.printf("send:\t%x\r\n", cmd[0]);
+        }
+    }
+}
+
+void downlink_handler(char* data){  
+    /*
+    send_data = bytearray(16)
+    send_data[0] = 0x44   # Header
+    send_data[1] = mission_timer_reset
+    send_data[2] = mission_time_int
+    send_data[3] = flight_time_int
+    send_data[4] = phase
+    send_data[5] = flags
+    send_data[6] = press_bits_A
+    send_data[7] = press_bits_B
+    send_data[8] = press_bits_C
+    send_data[9] = temp_bits 
+    send_data[10] = lat_bits_A
+    send_data[11] = lat_bits_B
+    send_data[12] = lat_bits_C
+    send_data[13] = lon_bits_A
+    send_data[14] = lon_bits_B
+    send_data[15] = lon_bits_C
+    */
+
+    mission_timer_reset = data[1];
+    mission_time_bits = data[2];
+    flight_time = data[3];
+    phase = data[4];
+    flags = data[5];
+    press100 = int((data[6] << 16) | (data[7] << 8) | (data[8] << 0));
+    temperature = int(data[9]);
+    lat10000 = int(data[10] << 16) | (data[11] << 8) | (data[12] << 0);
+    lon10000 = int(data[13] << 16) | (data[14] << 8) | (data[15] << 0);
+    
+    flight_time = short(data[3] << 8) | (data[4] << 0);
+
+    mission_time = mission_time_bits + 180*mission_timer_reset;
+    
+    pc.printf(" PLANET-Q GROUND STATION\r\n");
+    pc.printf(" commands:\r\n"); 
+    pc.printf(" 0   : SAFETY\r\n");
+    pc.printf(" 1   : READY\r\n");
+    pc.printf(" 2   : FLIGHT\r\n");
+    pc.printf(" 3   : SEP\r\n");
+    pc.printf(" 4   : EMERGENCY\r\n");
+    pc.printf(" 5   : RECOVERY\r\n");
+    pc.printf(" DEL : SYSTEM RESET\r\n");
+    pc.printf("\r\n");
+    pc.printf("timer reset\t%d", mission_timer_reset);
+    pc.printf(" mission time:\t%d[ms]", mission_time);
+    pc.printf(" flight time:\t%d[ms]\r\n", flight_time);
+    pc.printf(" phase:\t%d\r\n", phase);
+    pc.printf("\r\n");
+    pc.printf(" lat:\t\t%.6f\r\n", lat10000/10000);
+    pc.printf(" lon:\t\t%.6f\r\n", lon10000/10000);
+    pc.printf("\r\n");
+    pc.printf(" press:\t\t%.2f[hPa]\r\n", press100/100);
+    pc.printf(" temperature:\t\t%.2f[C]\r\n", temperature);
+    pc.printf("\r\n");
+    
+}
