@@ -1,7 +1,7 @@
 #モンゴル打ち上げの分離とリーフィング用のプログラム
 
 '''
-ライブラリー
+ライブラリ
 '''
 
 from machine import I2C, Pin, Timer, UART
