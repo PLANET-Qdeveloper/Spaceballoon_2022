@@ -7,7 +7,6 @@
 from machine import I2C, Pin, Timer, UART
 from utime import ticks_ms, sleep
 
-from PQ_RM92A import RM92A
 from bme280 import BME280
 from PQ_LPS22HB import LPS22HB
 
@@ -17,17 +16,15 @@ from PQ_LPS22HB import LPS22HB
 '''
 
 signal_timing = 1000
-delay = 5
+delay = 2
 pre0 = 1013  #海面気圧。[hPa]で入力。
 alti = 2000  #目標開始高度。[m]で入力。
+sep_timing = 10000 #分離作動タイミング。
 
 
 '''
 通信関係
 '''
-
-# UART通信
-rm_uart= UART(0, baudrate=115200, tx=Pin(0), rx=Pin(1))
 
 #I2Cのピン設定
 lps_i2c = I2C(0, sda=Pin(12), scl=Pin(13),freq=400000)
@@ -43,16 +40,17 @@ pres = []
 temp = []
 
 #ピンのインスタンス
-Aphase = Pin(18, Pin.OUT)
-Aenable = Pin(19, Pin.OUT)
-Bphase = Pin(20, Pin.OUT)
-Benable = Pin(21, Pin.OUT)
+Aphase = Pin(20, Pin.OUT)
+Aenable = Pin(21, Pin.OUT)
+Bphase = Pin(18, Pin.OUT)
+Benable = Pin(19, Pin.OUT)
+
 
 
 #ピンのインスタンス
 p2 = Pin(2, Pin.IN)  #irq用
 IN1 = Pin(16, Pin.OUT)
-IN2 = Pin(18, Pin.OUT)
+IN2 = Pin(17, Pin.OUT)
 nich = Pin(27, Pin.OUT)  #ニクロム線用
 
 IN1.value(0)
@@ -63,7 +61,7 @@ nich.value(0)
 '''
 Timerオブジェクト(周期処理用)
 '''
-
+init_time = ticks_ms()
 irq_called_time = ticks_ms()
 data_timer = Timer()
 
@@ -78,9 +76,12 @@ bme = BME280(i2c=bme_i2c)
 phase = 0
 command = 48
 
-pre_last = Mpress
+Mpress = float
+Mtemp = float
+pre_last = pre0
 
 rock = False
+block_irq = True
 
 '''
 関数
@@ -114,16 +115,20 @@ def function():
 
 
 #アップリンク
+'''
 def command_handler(p2):
     global block_irq, irq_called_time, phase, command
 
-    rx_buf = bytearray(10)
+    rx_buf = bytearray(25)
 
     if (ticks_ms() - irq_called_time) > signal_timing:
         block_irq = False
     if not block_irq:
         rm_uart.readinto(rx_buf, 4)
         command = rx_buf[0]
+        if command == 0:
+            if phase == 0:
+                phase = 1
         if command == 48:    
             if phase == 1:
                 phase = 0
@@ -134,7 +139,7 @@ def command_handler(p2):
         irq_called_time = ticks_ms()
         block_irq = True
 irq_obj = p2.irq(handler=command_handler, trigger=(Pin.IRQ_FALLING | Pin.IRQ_RISING)) 
-
+'''
 
 def rotateCw():
     Aenable.value(1)
@@ -160,7 +165,8 @@ def rotateCw():
 
 
 def data():
-    global t1, p1, h1, pi1, ti1, press, temperature, Mpress, Mtemp
+    global t1, p1, h1, pi1, ti1, press, temperature, Mpress, Mtemp, pres, temp
+    
     try:
         t1,p1,h1 = bme.read_compensated_data() 
 
@@ -173,6 +179,7 @@ def data():
 
     pres.append(pi1)
     temp.append(ti1) 
+    
     
     try:
         press = lps.read_pressure()
@@ -192,13 +199,14 @@ def data():
 
     pres.clear() 
     temp.clear()
-data_timer.init(period=500, callback=data)
+    
+    return [Mpress, Mtemp]
 
 
-def altitude(pre, tem):
+def altitude(pre, tem):  
     T = tem + 273.15
     nume = (pre0/pre)**(1/5.257) - 1
-
+    
     alti = nume*T/0.0065
 
     return alti
@@ -207,26 +215,23 @@ def altitude(pre, tem):
 def main():
     global phase, Mpress, Mtemp, pre_now, pre_last, tem_now, rock
     while True:
-        pre_now = Mpress
-        tem_now = Mtemp
+        pre_now, tem_now= data()
         if altitude(pre_now,tem_now) >= 10000:
             rock = True
+            
         if pre_now > pre_last:
             if altitude(pre_now, tem_now) <= 2000:
                 if rock:
                     rotateCw()
-
-        if phase == 1:
-            heat()
-            sleep(13)
-            function()
-
-            phase = 2
-
-
-        pre_last = pre_now
+    
+        if phase == 0:
+            if ticks_ms() - init_time > sep_timing:
+                heat()
+                sleep(3)
+                function()
+                phase = 1
         sleep(1)
-
+        
 
 if __name__=='__main__':
     main()
