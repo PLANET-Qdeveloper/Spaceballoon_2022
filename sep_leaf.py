@@ -48,7 +48,6 @@ Benable = Pin(19, Pin.OUT)
 
 
 #ピンのインスタンス
-p2 = Pin(2, Pin.IN)  #irq用
 IN1 = Pin(16, Pin.OUT)
 IN2 = Pin(17, Pin.OUT)
 nich = Pin(27, Pin.OUT)  #ニクロム線用
@@ -68,8 +67,6 @@ data_timer = Timer()
 '''
 変数宣言
 '''
-
-rm = RM92A(rm_uart)
 lps = LPS22HB(lps_i2c)
 bme = BME280(i2c=bme_i2c)
 
