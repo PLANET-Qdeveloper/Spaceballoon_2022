@@ -1,0 +1,16 @@
+from machine import Pin, PWM
+import utime
+
+pwm = PWM(Pin(18))
+
+pwm.freq(50)
+
+#degree [°]
+def servo_value(degree):
+    return int((degree * 9.5 / 180 + 2.5) * 65535 / 100)
+
+
+while True:    
+    pwm.duty_u16(servo_value(90))
+    utime.sleep(1)
+    
